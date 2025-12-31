@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moiz-mxfp4"
+version = "0.2.0"
+description = "Hybrid MXFP4: QuTLASS (Blackwell 4x) + Triton (Ampere/Ada 2x) with auto backend selection"
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.9.0",  # Required for Blackwell sm_120 support
+    "triton>=2.1.0",
+    "numpy>=1.21.0,<2.0"
+    # Note: nvidia-cudnn-cu12==9.15.1.9 is installed separately to avoid conflict with torch
+]
+
+[project.optional-dependencies]
+# Development dependencies
+dev = [
+    "pytest",
+    "black",
+    "isort"
+]
+
+# Blackwell native FP4 acceleration (4x speedup)
+blackwell = [
+    "qutlass @ git+https://github.com/moizyousufi/moiz-qutlass-public.git"
+]
+
+# All optional dependencies
+all = [
+    "pytest",
+    "black",
+    "isort",
+    "qutlass @ git+https://github.com/moizyousufi/moiz-qutlass-public.git"
+]

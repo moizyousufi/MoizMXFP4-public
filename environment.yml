@@ -1,0 +1,33 @@
+name: moiz-mxfp4
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy>=1.21.0
+  - cmake  # Required for MoizQuTLASS build on Blackwell
+  - ninja  # Build system for faster compilation
+  - scipy  # Required for Hadamard matrices in QuTLASS
+  # Use system CUDA 12.8 (not conda cuda-toolkit to avoid platform issues)
+  - cudnn=9.15.1.9  # cuDNN 9.15 for CUDA 12.x
+  # Dependencies for building Triton from source (if needed)
+  - zlib  # Required for Triton LLVM build
+  - libxml2  # Required for Triton LLVM build
+  - pip
+  - pip:
+    - torch>=2.9.0
+    - triton>=2.1.0
+    # Note: MoizQuTLASS is installed via install_blackwell.sh (requires --no-build-isolation)
+    # Uses CUTLASS backend for 2-3x speedup on MXFP4 quantization
+    - pytest
+    - black
+    - isort
+    - six
+    - pygments
+    - packaging
+    - exceptiongroup
+    - tomli
+    - tabulate
+    - pandas>=1.5.0

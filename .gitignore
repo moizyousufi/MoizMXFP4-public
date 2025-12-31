@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+*.egg
+.Python
+
+# CUDA build artifacts
+*.so
+*.o
+*.cuda.o
+*.d
+build/
+dist/
+
+# PyTorch extensions cache
+.cache/
+torch_extensions/
+
+# Test outputs (keep test files themselves)
+test_output.txt
+test_phase*_output.txt
+*_output.txt
+
+# Profiling outputs
+pytorch_trace.json
+*.ncu-rep
+ncu_*.txt
+profile_*.json
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.venv
+env/
+venv/
+
+
+# Additional folders
+docs/
