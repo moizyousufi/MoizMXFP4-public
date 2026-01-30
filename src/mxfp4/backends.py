@@ -158,6 +158,8 @@ class QuTLASSBackend(MXFP4Backend):
                 "pip install --no-build-isolation git+https://github.com/moizyousufi/moiz-qutlass-public.git"
             )
         self.qutlass = qutlass
+        # cache identity matrices
+        self._identity_cache = {}
 
     def quantize(self, tensor: torch.Tensor, block_size: int = 32):
         """Quantize using QuTLASS fused kernel (native speedup)."""
@@ -165,21 +167,21 @@ class QuTLASSBackend(MXFP4Backend):
             return super().quantize(tensor, block_size)
 
         K = tensor.shape[-1]
-        
-        # requires K divisible by 32
+
         if K % 32 != 0:
             return super().quantize(tensor, block_size)
 
-        # Create Identity matrix for H (no rotation)
-        # TODO: Cache this for performance?
-        H = torch.eye(K, dtype=tensor.dtype, device=tensor.device)
-        
-        # Use fused kernel (auto-detects v2 for large K)
-        # method="abs_max" matches default behavior of MXFP4Quantizer
+        # use cached identity matrix
+        cache_key = (K, tensor.dtype, tensor.device.index if tensor.device.type == 'cuda' else -1)
+        if cache_key not in self._identity_cache:
+            self._identity_cache[cache_key] = torch.eye(K, dtype=tensor.dtype, device=tensor.device)
+        H = self._identity_cache[cache_key]
+
+        # use fused kernel (auto-detects v2 for large K)
         packed, scales = self.qutlass.fusedQuantizeMx(
             tensor, H, method="abs_max", use_v2=None
         )
-        
+
         return packed, scales
 
     def dequantize(self, packed: torch.Tensor, scales: torch.Tensor, shape: tuple):
@@ -195,7 +197,6 @@ class QuTLASSBackend(MXFP4Backend):
         N = packed_weight.shape[0]
 
         if K % 32 != 0:
-            # requires K divisible by 32 (MXFP4 block size)
             warnings.warn(
                 f"K={K} not divisible by 32. QuTLASS requires K % 32 == 0. "
                 f"Falling back to Triton kernel."
@@ -203,7 +204,7 @@ class QuTLASSBackend(MXFP4Backend):
             from mxfp4.fused_kernels import quant_matmul
             return quant_matmul(input, packed_weight, weight_scales, bias)
 
-        # quantize input activations to MXFP4 using QuTLASS
+        # quantize input activations
         try:
             packed_input, input_scales = self.quantize(input, block_size=32)
         except Exception as e:
@@ -214,18 +215,19 @@ class QuTLASSBackend(MXFP4Backend):
             from mxfp4.fused_kernels import quant_matmul
             return quant_matmul(input, packed_weight, weight_scales, bias)
 
-        # call native QuTLASS MXFP4 matmul (uses Blackwell FP4 tensor cores)
-        # alpha is a tensor array (not scalar) - QuTLASS API requirement
+        # QuTLASS matmul
         alpha = torch.tensor([1.0], device=input.device)
 
-        # convert scales from uint8 (E8M0) to float8_e8m0fnu dtype
-        # then apply to_blocked() to convert to QuTLASS's blocked layout
+        # convert scales to blocked layout
         input_scales_fp8 = input_scales.view(torch.float8_e8m0fnu)
-        weight_scales_fp8 = weight_scales.view(torch.float8_e8m0fnu)
-
-        # CRITICAL: to_blocked() converts scales to QuTLASS's expected layout
         input_scales_blocked = self.qutlass.utils.to_blocked(input_scales_fp8, use_triton_kernel=True)
-        weight_scales_blocked = self.qutlass.utils.to_blocked(weight_scales_fp8, use_triton_kernel=True)
+
+        # use pre-converted weight scales if available
+        if isinstance(weight_scales, torch.Tensor) and hasattr(weight_scales, '_mxlinear_blocked'):
+            weight_scales_blocked = weight_scales._mxlinear_blocked
+        else:
+            weight_scales_fp8 = weight_scales.view(torch.float8_e8m0fnu)
+            weight_scales_blocked = self.qutlass.utils.to_blocked(weight_scales_fp8, use_triton_kernel=True)
 
         try:
             output = self.qutlass.matmul_mxf4_bf16_tn(
@@ -244,7 +246,7 @@ class QuTLASSBackend(MXFP4Backend):
             from mxfp4.fused_kernels import quant_matmul
             return quant_matmul(input, packed_weight, weight_scales, bias)
 
-        # Add bias if provided
+        # add bias if provided
         if bias is not None:
             output = output + bias.unsqueeze(0)
 
