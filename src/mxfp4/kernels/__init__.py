@@ -1,8 +1,9 @@
 """
 Architecture-Specific MXFP4 Kernels
 
-This module previously contained architecture-specific kernels.
-Now uses QuTLASS for Blackwell native FP4 support via the backend system.
+This module contains optimized kernels for different GPU architectures.
 """
 
-__all__ = []
+from .blackwell import quant_matmul_blackwell
+
+__all__ = ['quant_matmul_blackwell']

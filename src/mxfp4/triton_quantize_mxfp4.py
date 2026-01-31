@@ -61,18 +61,19 @@ def _mxfp4_quantize_kernel(
     # Number of MXFP4 blocks (32 elements each) in this tile
     num_mxfp4_blocks = BLOCK_K // 32
 
-    # Offset base pointers for this pair
-    input_base = input_ptr + pid_pair * input_stride_pair
-    quant_base = quant_ptr + pid_pair * quant_stride_pair
-    scales_base = scales_ptr + pid_pair * scales_stride_pair
+    # Offset base pointers for this pair (use int64 to avoid overflow)
+    pid_pair_i64 = pid_pair.to(tl.int64)
+    input_base = input_ptr + pid_pair_i64 * input_stride_pair
+    quant_base = quant_ptr + pid_pair_i64 * quant_stride_pair
+    scales_base = scales_ptr + pid_pair_i64 * scales_stride_pair
 
     # Process each MXFP4 block (32 elements) in this tile
     for mxfp4_idx in range(num_mxfp4_blocks):
         k_block_start = k_start + mxfp4_idx * 32
 
         # Load 32 elements [BLOCK_M, 32]
-        m_offsets = m_start + tl.arange(0, BLOCK_M)
-        k_offsets = k_block_start + tl.arange(0, 32)
+        m_offsets = (m_start + tl.arange(0, BLOCK_M)).to(tl.int64)
+        k_offsets = (k_block_start + tl.arange(0, 32)).to(tl.int64)
         m_idx = m_offsets[:, None]
         k_idx = k_offsets[None, :]
 
@@ -92,7 +93,7 @@ def _mxfp4_quantize_kernel(
         scales_e8m0 = tl.maximum(tl.minimum(exponents_int, 255), 0).to(tl.uint8)
 
         # Store scales [BLOCK_M]
-        scale_m_offsets = m_start + tl.arange(0, BLOCK_M)
+        scale_m_offsets = (m_start + tl.arange(0, BLOCK_M)).to(tl.int64)
         scale_k_offset = (k_block_start // 32)
         scale_ptrs = scales_base + scale_m_offsets * scales_stride_m + scale_k_offset
         scale_mask = scale_m_offsets < M
